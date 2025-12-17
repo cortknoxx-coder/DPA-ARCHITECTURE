@@ -1,0 +1,247 @@
+
+<div class="flex h-full flex-col font-sans bg-[#1e1e1e]">
+  <!-- Header -->
+  <header class="h-12 bg-[#181818] border-b border-[#2b2b2b] flex items-center px-4 justify-between shrink-0 select-none z-20">
+    <div class="flex items-center gap-2">
+      <div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+      <div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+      <div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+      <span class="ml-4 text-sm font-medium text-gray-400 font-mono">DPA Premium - Firmware Studio</span>
+    </div>
+    
+    <!-- Controls -->
+    <div class="flex items-center gap-4">
+       @if(buildProgress() > 0) {
+         <div class="w-32 h-1 bg-[#2d2d2d] rounded overflow-hidden">
+            <div class="h-full bg-blue-500 transition-all duration-300 ease-out" [style.width.%]="buildProgress()"></div>
+         </div>
+       }
+
+       <button (click)="runLinter()" 
+               [disabled]="isLinting()"
+               class="flex items-center gap-2 px-3 py-1 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-gray-300 text-xs rounded border border-[#3e3e3e] transition-colors disabled:opacity-50">
+          <svg class="w-3 h-3 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+          <span class="font-medium">{{ isLinting() ? 'Analyzing...' : 'Lint Project' }}</span>
+       </button>
+
+       <button (click)="runBuild()" 
+               [disabled]="isBuilding()"
+               class="flex items-center gap-2 px-3 py-1 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-gray-300 text-xs rounded border border-[#3e3e3e] transition-colors disabled:opacity-50">
+          <svg class="w-3 h-3 fill-green-500" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <span class="font-medium">{{ isBuilding() ? 'Building...' : 'Build Firmware' }}</span>
+       </button>
+       
+       <div class="w-[1px] h-4 bg-[#3e3e3e]"></div>
+
+       <div class="flex items-center gap-2 text-xs text-gray-500">
+          <span class="w-2 h-2 rounded-full bg-green-500" [class.animate-pulse]="!isBuilding()"></span>
+          <span>Target: ESP32-S3</span>
+       </div>
+    </div>
+  </header>
+
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-[#181818] border-r border-[#2b2b2b] flex flex-col shrink-0 select-none">
+      <div class="px-2 pt-2">
+        <input type="text" 
+               placeholder="Filter files..." 
+               class="w-full bg-[#252526] border border-[#3e3e3e] rounded-sm px-2 py-1 text-xs text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+               [value]="searchQuery()"
+               (input)="searchQuery.set($any($event.target).value)">
+      </div>
+
+      <div class="flex-1 overflow-y-auto font-mono text-sm custom-scrollbar pt-2">
+        @for (rootItem of filteredStructure(); track rootItem.name) {
+           <div class="mb-1">
+             <div class="px-2 py-[2px] text-gray-300 flex items-center gap-1 cursor-pointer hover:bg-[#2a2d2e] border-l-2 border-transparent" 
+                  (click)="toggleDir(rootItem)">
+                <span class="text-[10px] w-4 text-center text-gray-500 transform transition-transform duration-200" [class.rotate-90]="rootItem.isOpen">▶</span>
+                <span class="font-bold text-xs tracking-tight">{{ rootItem.name }}</span>
+             </div>
+             
+             @if (rootItem.isOpen) {
+               @if (rootItem.directories) {
+                 @for (dir of rootItem.directories; track dir.name) {
+                    <div>
+                      <div class="pl-4 py-[2px] text-gray-400 flex items-center gap-1 cursor-pointer hover:bg-[#2a2d2e]" (click)="toggleDir(dir)">
+                          <span class="text-[10px] w-4 text-center text-gray-500 transform transition-transform duration-200" [class.rotate-90]="dir.isOpen">▶</span>
+                          <span class="text-xs">{{ dir.name }}</span>
+                      </div>
+                      @if (dir.isOpen) {
+                        @for (file of dir.files; track file.name) {
+                          <div class="pl-9 py-[2px] cursor-pointer flex items-center gap-2 hover:bg-[#37373d] transition-colors group"
+                               [class.bg-[#37373d]]="activeFile() === file"
+                               (click)="selectFile(file)">
+                              <span class="text-xs" [class.text-blue-400]="file.name.endsWith('.h')" [class.text-orange-400]="file.name.endsWith('.yml')">{{ file.name.endsWith('.c') ? 'C' : (file.name.endsWith('.h') ? 'H' : '⚙️') }}</span>
+                              <span class="text-xs" [class.text-white]="activeFile() === file" [class.text-gray-500]="activeFile() !== file">{{ file.name }}</span>
+                          </div>
+                        }
+                      }
+                    </div>
+                 }
+               }
+               
+               @if (rootItem.files) {
+                 @for (file of rootItem.files; track file.name) {
+                    <div class="pl-6 py-[2px] cursor-pointer flex items-center gap-2 hover:bg-[#37373d] transition-colors group"
+                         [class.bg-[#37373d]]="activeFile() === file"
+                         (click)="selectFile(file)">
+                        <span class="text-xs opacity-80 group-hover:opacity-100">
+                          @if(file.name.endsWith('.md')) { 'ℹ️' } @else if (file.name.endsWith('.sh')) { '▶' } @else { '⚙️' }
+                        </span>
+                        <span class="text-xs" [class.text-white]="activeFile() === file" [class.text-gray-500]="activeFile() !== file">{{ file.name }}</span>
+                    </div>
+                 }
+               }
+             }
+           </div>
+        }
+      </div>
+    </aside>
+
+    <!-- Content Column (Editor + Terminal) -->
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+      
+      <!-- Main Editor Area -->
+      <main class="flex-1 flex flex-col overflow-hidden relative min-h-0 bg-[#1e1e1e]">
+        @if (activeFile(); as file) {
+          <div class="h-9 bg-[#1e1e1e] flex items-center border-b border-[#2b2b2b] px-4 sticky top-0 z-10 shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="text-xs px-1.5 py-0.5 rounded bg-[#2d2d2d] text-blue-400 font-mono">{{ file.language | uppercase }}</span>
+              <span class="text-sm text-gray-300 italic">{{ file.name }}</span>
+            </div>
+          </div>
+
+          <div class="flex-1 flex overflow-hidden">
+            <div class="w-12 bg-[#1e1e1e] flex flex-col items-end pt-4 pr-3 select-none text-xs font-mono text-[#6e7681] border-r border-[#2b2b2b] shrink-0">
+               @for (num of lineNumbers(); track num) {
+                 <div class="h-[20px] leading-[20px]">{{ num }}</div>
+               }
+            </div>
+            
+            <div class="flex-1 overflow-auto p-4 pt-4 custom-scrollbar">
+              <pre class="text-sm leading-[20px] font-mono text-[#d4d4d4] outline-none"><code [innerHTML]="file.content | syntax:file.language"></code></pre>
+            </div>
+          </div>
+          
+        } @else {
+          <div class="flex-1 flex flex-col bg-[#1e1e1e] overflow-auto">
+            <div class="p-10 max-w-4xl mx-auto w-full">
+                <h1 class="text-3xl font-light text-white mb-2">DPA Premium <span class="text-[#007acc]">Architecture Studio</span></h1>
+                <p class="text-gray-400 mb-10">Firmware Version 9.0 (Production Hardened)</p>
+                 <div class="grid grid-cols-3 gap-6 mb-10">
+                  <div class="flex flex-col gap-4">
+                      <div class="bg-[#2d2d2d] p-4 rounded border border-[#3e3e3e] flex items-center gap-3">
+                        <div class="w-8 h-8 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center">📶</div>
+                        <div><div class="text-sm font-bold text-gray-200">dpa_ble</div><div class="text-xs text-gray-500">NimBLE GATT Server</div></div>
+                      </div>
+                      <div class="bg-[#2d2d2d] p-4 rounded border border-[#3e3e3e] flex items-center gap-3">
+                        <div class="w-8 h-8 rounded bg-yellow-500/20 text-yellow-400 flex items-center justify-center">🔌</div>
+                        <div><div class="text-sm font-bold text-gray-200">dpa_usb</div><div class="text-xs text-gray-500">TinyUSB MSC</div></div>
+                      </div>
+                  </div>
+                  <div class="flex flex-col gap-4 justify-center relative">
+                      <div class="absolute inset-y-0 -left-3 border-l-2 border-dashed border-[#3e3e3e] w-0"></div>
+                      <div class="absolute inset-y-0 -right-3 border-r-2 border-dashed border-[#3e3e3e] w-0"></div>
+                      <div class="bg-[#252526] p-6 rounded-lg border-2 border-[#007acc] shadow-lg shadow-black/50 z-10">
+                        <div class="text-xs text-[#007acc] font-bold mb-1 uppercase tracking-wider">Application Core</div>
+                        <h2 class="text-xl text-white font-bold mb-4">dpa_core</h2>
+                        <div class="space-y-2">
+                            <div class="text-xs bg-[#1e1e1e] p-2 rounded text-gray-300 font-mono">state_machine / event_bus</div>
+                            <div class="text-xs bg-[#1e1e1e] p-2 rounded text-gray-300 font-mono">dpa_sys (WDT/Crash)</div>
+                        </div>
+                      </div>
+                  </div>
+                  <div class="flex flex-col gap-4">
+                      <div class="bg-[#2d2d2d] p-4 rounded border border-[#3e3e3e] flex items-center gap-3">
+                        <div class="w-8 h-8 rounded bg-red-500/20 text-red-400 flex items-center justify-center">🎵</div>
+                        <div><div class="text-sm font-bold text-gray-200">dpa_audio</div><div class="text-xs text-gray-500">I2S DMA + Decoder</div></div>
+                      </div>
+                      <div class="bg-[#2d2d2d] p-4 rounded border border-[#3e3e3e] flex items-center gap-3">
+                        <div class="w-8 h-8 rounded bg-green-500/20 text-green-400 flex items-center justify-center">🔒</div>
+                        <div><div class="text-sm font-bold text-gray-200">dpa_drm</div><div class="text-xs text-gray-500">AES-CTR Engine</div></div>
+                      </div>
+                  </div>
+                </div>
+            </div>
+          </div>
+        }
+      </main>
+
+      <!-- Bottom Panel -->
+      <div class="border-t border-[#2b2b2b] bg-[#181818] flex flex-col shrink-0 transition-all duration-300 ease-in-out" 
+           [style.height.px]="isTerminalOpen() ? 240 : 28">
+         <div class="h-7 flex items-center px-4 bg-[#181818] border-b border-[#2b2b2b] gap-6 text-xs font-medium select-none shrink-0">
+            <button (click)="activeTerminalTab.set('terminal')" class="h-full border-b-2" [class.border-white]="activeTerminalTab() === 'terminal'" [class.border-transparent]="activeTerminalTab() !== 'terminal'" [class.text-white]="activeTerminalTab() === 'terminal'" [class.text-gray-500]="activeTerminalTab() !== 'terminal'">TERMINAL</button>
+            <button (click)="activeTerminalTab.set('problems')" class="h-full border-b-2 flex items-center gap-1.5" [class.border-white]="activeTerminalTab() === 'problems'" [class.border-transparent]="activeTerminalTab() !== 'problems'" [class.text-white]="activeTerminalTab() === 'problems'" [class.text-gray-500]="activeTerminalTab() !== 'problems'">
+              PROBLEMS <span class="text-xs bg-[#333] px-1.5 py-0.5 rounded-full">{{ lintProblems().length }}</span>
+            </button>
+            <button (click)="activeTerminalTab.set('memory')" [disabled]="!memoryStats()" class="h-full border-b-2 disabled:opacity-50" [class.border-white]="activeTerminalTab() === 'memory'" [class.border-transparent]="activeTerminalTab() !== 'memory'" [class.text-white]="activeTerminalTab() === 'memory'" [class.text-gray-500]="activeTerminalTab() !== 'memory'">MEMORY INSPECTOR</button>
+         </div>
+
+         @if (isTerminalOpen()) {
+           <div class="flex-1 overflow-y-auto font-mono text-sm text-gray-300 custom-scrollbar relative">
+             @switch (activeTerminalTab()) {
+               @case ('terminal') {
+                  <div class="p-3">
+                    @for (log of terminalLogs(); track log) {
+                      <div class="whitespace-pre-wrap leading-tight" [class.text-green-400]="log.includes('✅')">{{ log }}</div>
+                    }
+                  </div>
+               }
+               @case ('problems') {
+                 <div class="p-2 text-xs">
+                   @if(isLinting()) { <div class="p-4 text-center text-gray-500">Running static analysis...</div> }
+                   @else if (lintProblems().length === 0) { <div class="p-4 text-center text-gray-500">No problems detected.</div> }
+                   @else {
+                     @for (problem of lintProblems(); track problem) {
+                       <div (click)="navigateToProblem(problem)" class="flex items-start gap-3 p-1.5 rounded hover:bg-[#2a2d2e] cursor-pointer">
+                         <span class="text-yellow-400 mt-0.5">⚠️</span>
+                         <div>
+                            <span class="text-gray-400">{{problem.file.name}}:<span class="text-green-400">{{problem.line}}</span></span>
+                            <span class="ml-2 text-gray-200">{{problem.message}}</span>
+                         </div>
+                       </div>
+                     }
+                   }
+                 </div>
+               }
+               @case ('memory') {
+                 @if(memoryStats(); as stats) {
+                   <div class="p-4 space-y-4 text-xs">
+                     <div>
+                       <div class="flex justify-between mb-1">
+                         <span class="font-bold text-gray-300">DRAM Usage</span>
+                         <span class="text-gray-500">{{ (stats.dramUsed / 1024).toFixed(1) }}KB / {{ (stats.dramTotal / 1024).toFixed(1) }}KB</span>
+                       </div>
+                       <div class="w-full bg-[#2d2d2d] h-3 rounded-sm overflow-hidden"><div class="bg-blue-500 h-full" [style.width.%]="(stats.dramUsed / stats.dramTotal) * 100"></div></div>
+                     </div>
+                     <div>
+                       <div class="flex justify-between mb-1">
+                         <span class="font-bold text-gray-300">IRAM Usage</span>
+                         <span class="text-gray-500">{{ (stats.iramUsed / 1024).toFixed(1) }}KB / {{ (stats.iramTotal / 1024).toFixed(1) }}KB</span>
+                       </div>
+                       <div class="w-full bg-[#2d2d2d] h-3 rounded-sm overflow-hidden"><div class="bg-purple-500 h-full" [style.width.%]="(stats.iramUsed / stats.iramTotal) * 100"></div></div>
+                     </div>
+                   </div>
+                 }
+               }
+             }
+           </div>
+         }
+      </div>
+
+      <!-- Footer Status Bar -->
+      <div class="h-6 bg-[#007acc] text-white flex items-center px-3 text-xs justify-between shrink-0 select-none cursor-default z-20">
+          <div class="flex gap-4">
+            @if(activeFile(); as file) { <span>Ln {{lineNumbers().length}}, Col 1</span> } @else { <span>Architecture View</span> }
+          </div>
+          <div class="flex gap-4">
+            @if(isBuilding() || isLinting()) { <span class="animate-pulse">Task in progress...</span> } @else { <span>ESP-IDF 5.1</span> }
+          </div>
+      </div>
+      
+    </div>
+  </div>
+</div>

@@ -1,0 +1,5 @@
+{
+  "name": "DPA Firmware Architect Studio",
+  "description": "A firmware engineering dashboard for the DPA Premium ESP32-S3 project. View refined C11 firmware code, CMake configurations, and project structure.",
+  "requestFramePermissions": []
+}
