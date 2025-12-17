@@ -73,7 +73,10 @@
                           <div class="pl-9 py-[2px] cursor-pointer flex items-center gap-2 hover:bg-[#37373d] transition-colors group"
                                [class.bg-[#37373d]]="activeFile() === file"
                                (click)="selectFile(file)">
-                              <span class="text-xs" [class.text-blue-400]="file.name.endsWith('.h')" [class.text-orange-400]="file.name.endsWith('.yml')">{{ file.name.endsWith('.c') ? 'C' : (file.name.endsWith('.h') ? 'H' : '⚙️') }}</span>
+                              @if(file.name.endsWith('.c')) { <span class="text-xs text-gray-400">C</span> }
+                              @else if (file.name.endsWith('.h')) { <span class="text-xs text-blue-400">H</span> }
+                              @else if (file.name.endsWith('.yml')) { <span class="text-xs text-orange-400">Y</span> }
+                              @else { <span class="text-xs text-gray-600">⚙️</span> }
                               <span class="text-xs" [class.text-white]="activeFile() === file" [class.text-gray-500]="activeFile() !== file">{{ file.name }}</span>
                           </div>
                         }
@@ -129,7 +132,7 @@
           <div class="flex-1 flex flex-col bg-[#1e1e1e] overflow-auto">
             <div class="p-10 max-w-4xl mx-auto w-full">
                 <h1 class="text-3xl font-light text-white mb-2">DPA Premium <span class="text-[#007acc]">Architecture Studio</span></h1>
-                <p class="text-gray-400 mb-10">Firmware Version 9.0 (Production Hardened)</p>
+                <p class="text-gray-400 mb-10">Firmware Version 10.0 (Developer Handoff)</p>
                  <div class="grid grid-cols-3 gap-6 mb-10">
                   <div class="flex flex-col gap-4">
                       <div class="bg-[#2d2d2d] p-4 rounded border border-[#3e3e3e] flex items-center gap-3">

@@ -6,11 +6,124 @@ export interface CodeFile {
 }
 
 export interface Directory {
-  name: string;
+  name:string;
   files: CodeFile[];
   directories?: Directory[];
   isOpen?: boolean;
 }
+
+// ==========================================================================
+// DOCUMENTATION (v10.0)
+// ==========================================================================
+
+const DOCS_SETUP_MD = `# Developer Setup Guide
+
+This guide describes how to set up a local development environment for the DPA Premium firmware.
+
+## 1. Prerequisites
+
+- A Linux or macOS environment (Windows with WSL2 is also suitable).
+- Git version control.
+- Python 3.8 or higher.
+
+## 2. ESP-IDF Setup
+
+The project is built using ESP-IDF v5.1.
+
+\`\`\`bash
+# 1. Clone the ESP-IDF repository
+git clone -b v5.1 --recursive https://github.com/espressif/esp-idf.git
+
+# 2. Run the installer
+cd esp-idf
+./install.sh esp32s3
+
+# 3. Source the environment script
+# Add this line to your .bashrc or .zshrc for convenience
+source $HOME/esp-idf/export.sh
+\`\`\`
+
+## 3. Project Build
+
+With the environment configured, you can now build the firmware.
+
+\`\`\`bash
+# 1. Clone the DPA Premium firmware repository
+git clone <repo_url>
+cd dpa-premium-firmware
+
+# 2. Set the target SoC
+idf.py set-target esp32s3
+
+# 3. Build the project
+idf.py build
+\`\`\`
+
+A successful build will generate the \`dpa-firmware.bin\` file in the \`build/\` directory.
+`;
+
+const DOCS_CAPSULE_SPEC_MD = `# DPA Capsule Specification (v2.0)
+
+A DPA Capsule (\`.dpa\` file) is a secure, multi-content container for delivering digital assets like audio, metadata, and unlockable perks.
+
+## Philosophy
+
+The format is designed to be extensible. It uses a manifest to describe the contents, allowing a single encrypted capsule to hold multiple, distinct data blocks (e.g., an audio track, tour date information, and a merchandise image).
+
+## Binary Structure
+
+The file consists of a fixed-size header, a variable-size manifest, and the concatenated data blocks. All multi-byte fields are little-endian.
+
+### 1. Header (64 Bytes)
+
+| Offset | Size | Field              | Description                                                  |
+|--------|------|--------------------|--------------------------------------------------------------|
+| 0      | 4    | Magic              | Must be **"DPA2"** (0x32415044)                               |
+| 4      | 4    | Version            | Capsule format version, currently \`2\`.                         |
+| 8      | 16   | IV                 | 128-bit Initialization Vector for the AES-CTR cipher stream. |
+| 24     | 32   | Wrapped Key        | 256-bit AES content key, encrypted with a hardware master key. |
+| 56     | 4    | Manifest Entries   | The number of \`dpa_manifest_entry_t\` structs that follow.      |
+| 60     | 4    | Reserved           | Must be zero.                                                |
+
+### 2. Content Manifest (N * 64 Bytes)
+
+Immediately following the header is an array of \`dpa_manifest_entry_t\` structs. The size of this section is \`Manifest Entries * 64\`.
+
+#### Manifest Entry Structure (64 Bytes)
+
+| Rel. Offset | Size | Field      | Description                                                                                                   |
+|-------------|------|------------|---------------------------------------------------------------------------------------------------------------|
+| 0           | 4    | \`type\`     | A \`dpa_content_type_t\` enum value (e.g., \`1\` for Audio).                                                        |
+| 4           | 4    | \`flags\`    | Reserved for future use (e.g., compression hints). Must be zero.                                                |
+| 8           | 32   | \`id\`       | Null-terminated UTF-8 string identifier for the content (e.g., "track_01", "merch_tee_1"). Max 31 chars + null. |
+| 40          | 8    | \`offset\`   | Byte offset of this content's data, relative to the start of the Data Region.                                   |
+| 48          | 8    | \`size\`     | The exact size of this content's data in bytes.                                                                 |
+| 56          | 8    | \`metadata\` | Content-specific data. For 24/96 audio, this could be the sample rate (96000). For links, it could be an index. |
+
+### 3. Data Region
+
+This region starts immediately after the Content Manifest. It contains all the raw, encrypted data for all content entries, concatenated together. The \`offset\` field in each manifest entry points to a location within this region.
+
+## Encryption
+
+- The entire capsule, starting from the **Content Manifest** to the end of the file, is treated as a single continuous stream encrypted with **AES-256-CTR**. The header itself is not encrypted.
+- The **Wrapped Key** in the header is encrypted using a NIST Key Wrap algorithm (e.g., AES-KW) with a hardware-derived master key. This prevents the content key from being extracted on non-authorized hardware.
+`;
+
+const DOCS_API_MD = `# DPA BLE API Specification
+
+This document defines the GATT service and characteristics for interacting with the DPA Premium device.
+
+**Service UUID**: \`5c6c0000-1212-efde-1523-785feabcd123\`
+
+| Name                 | UUID Suffix | Access   | Description                                           |
+|----------------------|-------------|----------|-------------------------------------------------------|
+| **Identity**         | \`...0100\`   | Read     | Returns the UTF-8 string of the \`DPA_ALBUM_ID\`.       |
+| **OTA URL**          | \`...0300\`   | Write    | Write a UTF-8 URL to trigger a firmware update.       |
+| **Playback Control** | \`...0400\`   | Write    | Write a single byte command: <br> \`0x01\`: Toggle Play/Pause <br> \`0x02\`: Next Track <br> \`0x03\`: Previous Track |
+| **Playback Status**  | \`...0500\`   | Notify   | Notifies with a single byte: <br> \`0x00\`: Idle/Paused <br> \`0x01\`: Playing |
+| **Battery Level**    | \`...0600\`   | Notify   | Notifies with a single byte representing battery percentage (0-100). |
+`;
 
 // ==========================================================================
 // ROOT CONFIGURATION
@@ -47,24 +160,38 @@ factory,  app,  factory, ,        4M,
 storage,  data, spiffs,  ,        8M, encrypted
 `;
 
-const README_MD = `# DPA Premium Firmware v9.0
+const README_MD = `# DPA Premium Firmware v11.0.0
+
+This repository contains the final architectural blueprint for the DPA Premium audio player firmware, built on ESP-IDF v5.1 for the ESP32-S3.
+
+## Getting Started
+
+A complete guide for setting up a local development environment and building the firmware can be found in the documentation:
+
+**[Developer Setup Guide](./docs/SETUP.md)**
 
 ## Architecture
-The DPA Premium firmware is a zoneless, event-driven system built on ESP-IDF v5.1.
 
-### Key Components
-- **dpa_core**: Central event bus and state machine.
-- **dpa_audio**: High-fidelity I2S playback engine with a dedicated decoder task and DMA.
-- **dpa_drm**: AES-256-CTR streaming decryption for content capsules.
-- **dpa_sys**: Telemetry, Watchdogs, and Crash handling.
-- **dpa_ble**: NimBLE stack with full playback controls.
-- **dpa_power**: Active battery monitoring and PMIC interface task.
+The firmware is a zoneless, event-driven system. The key to the DPA platform is the multi-content capsule format, which allows a single secure file to deliver the entire digital experience.
 
-## v9.0 Changes (Production Hardening)
-- Fixed main event loop to correctly start player and handle system errors.
-- Added active power monitoring task.
-- Converted button input from polling to interrupt-driven to save power.
-- Added stubs for a full BLE playback control API.
+- **[Capsule v2.0 Specification](./docs/CAPSULE_SPEC.md)**: **REQUIRED READING.** Defines the manifest-based secure audio file format.
+- **[BLE API Specification](./docs/API.md)**: Defines the GATT contract for mobile app interaction.
+
+## Next Steps / Implementation Plan
+
+The current codebase represents a complete and stable architecture. The following tasks are the priority for the development team to transform the architectural stubs into production features:
+
+1.  **Audio Decoder Integration** (\`dpa_player.c\`)
+    -   License and integrate a lightweight, high-resolution audio codec (e.g., Opus, FLAC).
+    -   Modify the \`player_task\` to decode the 24-bit/96kHz stream into PCM data before writing to the I2S HAL.
+
+2.  **Perk/Content Unlocking Logic** (\`dpa_core\` and \`main.c\`)
+    -   Implement UI/LED feedback for available perks discovered in a capsule's manifest.
+    -   Create tasks to handle non-audio content types (e.g., displaying a merch image URL via BLE).
+
+3.  **Power Management IC (PMIC) Logic** (\`dpa_power.c\`)
+    -   Implement the I2C driver for the selected PMIC.
+    -   Add logic to the \`power_monitor_task\` to handle charging states (Charging, Charged, Discharging).
 `;
 
 // ==========================================================================
@@ -242,7 +369,7 @@ const SYS_CMAKE = `idf_component_register(SRCS "dpa_sys.c" INCLUDE_DIRS "." REQU
 const DPA_SYS_H = `#pragma once
 #include "esp_err.h"
 
-#define DPA_FW_VERSION "9.0.0"
+#define DPA_FW_VERSION "11.0.0"
 
 /**
  * @brief Init Watchdogs, Brownout detectors, and Crash Handlers
@@ -417,7 +544,7 @@ esp_err_t dpa_security_verify_signature(const uint8_t *payload, size_t len, cons
 `;
 
 // ==========================================================================
-// COMPONENT: CAPSULE
+// COMPONENT: CAPSULE (v11.0 Refactor)
 // ==========================================================================
 
 const CAPSULE_CMAKE = `idf_component_register(SRCS "dpa_capsule.c" INCLUDE_DIRS "." REQUIRES esp_partition esp_littlefs dpa_drm)`;
@@ -428,15 +555,46 @@ const DPA_CAPSULE_H = `#pragma once
 #include <stdio.h>
 #include <stdint.h>
 
+// Defines the types of content a capsule can hold.
+typedef enum {
+    DPA_CONTENT_TYPE_UNKNOWN = 0,
+    DPA_CONTENT_TYPE_AUDIO,       // e.g., 24-bit 96kHz Opus stream
+    DPA_CONTENT_TYPE_VIDEO_LINK,  // Metadata contains a URL
+    DPA_CONTENT_TYPE_TOUR_INFO,   // JSON or similar structured text
+    DPA_CONTENT_TYPE_MERCH_LINK,  // Metadata contains a URL
+    DPA_CONTENT_TYPE_MERCH_IMAGE, // e.g., JPEG or WEBP data
+    DPA_CONTENT_TYPE_SIGNING,     // Metadata for digital signing events
+} dpa_content_type_t;
+
+// Represents one piece of content within the capsule's manifest.
+typedef struct {
+    dpa_content_type_t type;
+    uint32_t flags;
+    char id[32];
+    uint64_t offset;
+    uint64_t size;
+    uint64_t metadata;
+} __attribute__((packed)) dpa_manifest_entry_t;
+
+
+// Handle for an open content stream from a capsule.
 typedef struct { 
     FILE *fp; 
-    uint32_t data_offset;
+    uint64_t content_start_offset; // Start of this specific content in the file
+    uint64_t content_size;         // Size of this specific content
+    uint64_t bytes_read;           // How many bytes have been read so far
     dpa_drm_session_t drm;
 } dpa_capsule_handle_t;
 
 esp_err_t dpa_fs_mount_encrypted(void);
-dpa_capsule_handle_t* dpa_capsule_open_stream(const char *capsule_id);
+
+// Opens a specific piece of content within a capsule.
+dpa_capsule_handle_t* dpa_capsule_open_content(const char *capsule_id, const char *content_id);
+
+// Reads decrypted data from the opened content stream.
 int dpa_capsule_read(dpa_capsule_handle_t *h, uint8_t *buf, size_t len);
+
+// Closes the handle and file.
 void dpa_capsule_close(dpa_capsule_handle_t *h);
 `;
 
@@ -448,12 +606,14 @@ const DPA_CAPSULE_C = `#include "dpa_capsule.h"
 
 #define TAG "CAPSULE"
 
+// Capsule v2.0 Header Structure
 typedef struct {
-    char magic[4];    // "DPA1"
+    char magic[4];          // "DPA2"
     uint32_t version;
     uint8_t iv[16];   
     uint8_t wrapped_key[32];
-    uint8_t reserved[8];
+    uint32_t manifest_entries;
+    uint32_t reserved;
 } __attribute__((packed)) dpa_file_header_t;
 
 esp_err_t dpa_fs_mount_encrypted(void) {
@@ -461,41 +621,92 @@ esp_err_t dpa_fs_mount_encrypted(void) {
     return esp_vfs_littlefs_register(&conf);
 }
 
-dpa_capsule_handle_t* dpa_capsule_open_stream(const char *capsule_id) {
+dpa_capsule_handle_t* dpa_capsule_open_content(const char *capsule_id, const char *content_id) {
     char path[64];
     snprintf(path, sizeof(path), "/storage/%s.dpa", capsule_id);
     
     FILE *f = fopen(path, "rb");
-    if(!f) return NULL;
+    if(!f) { ESP_LOGE(TAG, "Capsule file not found: %s", path); return NULL; }
     
     dpa_file_header_t header;
-    if (fread(&header, 1, sizeof(header), f) != sizeof(header)) { fclose(f); return NULL; }
-    if (strncmp(header.magic, "DPA1", 4) != 0) { fclose(f); return NULL; }
-
-    dpa_capsule_handle_t *h = malloc(sizeof(dpa_capsule_handle_t));
-    h->fp = f;
-    h->data_offset = sizeof(header);
-    
-    if (dpa_drm_init_session(&h->drm, header.iv, header.wrapped_key) != ESP_OK) {
-        ESP_LOGE(TAG, "DRM Init Failed");
-        fclose(f); free(h); return NULL;
+    if (fread(&header, 1, sizeof(header), f) != sizeof(header)) {
+        ESP_LOGE(TAG, "Failed to read capsule header");
+        fclose(f); return NULL;
+    }
+    if (strncmp(header.magic, "DPA2", 4) != 0) {
+        ESP_LOGE(TAG, "Invalid capsule magic number");
+        fclose(f); return NULL;
     }
 
+    if (header.manifest_entries == 0 || header.manifest_entries > 100) { // Sanity check
+        ESP_LOGE(TAG, "Invalid manifest entry count: %u", header.manifest_entries);
+        fclose(f); return NULL;
+    }
+
+    // Read the entire manifest
+    size_t manifest_size = sizeof(dpa_manifest_entry_t) * header.manifest_entries;
+    dpa_manifest_entry_t *manifest = malloc(manifest_size);
+    if (!manifest) { fclose(f); return NULL; }
+    if (fread(manifest, 1, manifest_size, f) != manifest_size) {
+        ESP_LOGE(TAG, "Failed to read manifest");
+        free(manifest); fclose(f); return NULL;
+    }
+
+    // Find the requested content ID in the manifest
+    dpa_manifest_entry_t *target_entry = NULL;
+    for (uint32_t i = 0; i < header.manifest_entries; i++) {
+        if (strncmp(manifest[i].id, content_id, sizeof(manifest[i].id)) == 0) {
+            target_entry = &manifest[i];
+            break;
+        }
+    }
+    
+    if (!target_entry) {
+        ESP_LOGW(TAG, "Content ID '%s' not found in capsule '%s'", content_id, capsule_id);
+        free(manifest); fclose(f); return NULL;
+    }
+
+    dpa_capsule_handle_t *h = malloc(sizeof(dpa_capsule_handle_t));
+    if (!h) { free(manifest); fclose(f); return NULL; }
+
+    h->fp = f;
+    h->content_start_offset = sizeof(header) + manifest_size + target_entry->offset;
+    h->content_size = target_entry->size;
+    h->bytes_read = 0;
+    
+    fseek(f, h->content_start_offset, SEEK_SET);
+
+    if (dpa_drm_init_session(&h->drm, header.iv, header.wrapped_key) != ESP_OK) {
+        ESP_LOGE(TAG, "DRM Init Failed");
+        fclose(f); free(h); free(manifest); return NULL;
+    }
+    
+    free(manifest); // Manifest is no longer needed
     return h;
 }
 
 int dpa_capsule_read(dpa_capsule_handle_t *h, uint8_t *buf, size_t len) {
-    int read = fread(buf, 1, len, h->fp);
-    if (read > 0) {
-        dpa_drm_decrypt(&h->drm, buf, read);
+    if (!h || !h->fp) return -1;
+    
+    // Don't allow reading past the end of this content block
+    uint64_t remaining_bytes = h->content_size - h->bytes_read;
+    if (len > remaining_bytes) {
+        len = remaining_bytes;
     }
-    return read;
+    if (len == 0) return 0; // End of content
+
+    int read_bytes = fread(buf, 1, len, h->fp);
+    if (read_bytes > 0) {
+        dpa_drm_decrypt(&h->drm, buf, read_bytes);
+        h->bytes_read += read_bytes;
+    }
+    return read_bytes;
 }
 
 void dpa_capsule_close(dpa_capsule_handle_t *h) {
     if(h) { 
         dpa_drm_cleanup(&h->drm);
-        fclose(h->fp); 
+        if (h->fp) fclose(h->fp); 
         free(h); 
     }
 }
@@ -524,9 +735,10 @@ static i2s_chan_handle_t tx_handle = NULL;
 esp_err_t dpa_audio_hal_init(void) {
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     i2s_new_channel(&chan_cfg, &tx_handle, NULL);
-    i2s_std_config_t std_cfg = { .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(44100), .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO), .gpio_cfg = { .mclk = DPA_PIN_I2S_MCK, .bclk = DPA_PIN_I2S_BCK, .ws = DPA_PIN_I2S_WS, .dout = DPA_PIN_I2S_DO, .din = -1 } };
+    i2s_std_config_t std_cfg = { .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(96000), .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_24BIT, I2S_SLOT_MODE_STEREO), .gpio_cfg = { .mclk = DPA_PIN_I2S_MCK, .bclk = DPA_PIN_I2S_BCK, .ws = DPA_PIN_I2S_WS, .dout = DPA_PIN_I2S_DO, .din = -1 } };
     i2s_channel_init_std_mode(tx_handle, &std_cfg);
     i2s_channel_enable(tx_handle);
+    ESP_LOGI(TAG, "I2S HAL Initialized for 24-bit, 96kHz audio.");
     return ESP_OK;
 }
 void dpa_audio_hal_set_clock(uint32_t rate) { i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(rate); i2s_channel_reconfig_std_clock(tx_handle, &clk_cfg); }
@@ -543,6 +755,7 @@ const DPA_PLAYER_C = `#include "dpa_player.h"
 #include "dpa_capsule.h"
 #include "dpa_audio_hal.h"
 #include "dpa_core.h"
+#include "dpa_board.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
@@ -553,13 +766,13 @@ const DPA_PLAYER_C = `#include "dpa_player.h"
 
 static TaskHandle_t player_task_handle = NULL;
 
-// In a real system, this would be a sophisticated decoder task (e.g., Helix MP3, Opus)
+// In a real system, this would be a sophisticated decoder task (e.g., Opus, FLAC)
 // It would read from the capsule, decode, and write to a PCM buffer for the I2S task.
 // For this simulation, we combine it into one task.
 static void player_task(void *pvParameters) {
-    char *capsule_id = (char *)pvParameters;
+    char *track_id = (char *)pvParameters;
     
-    dpa_capsule_handle_t *file = dpa_capsule_open_stream(capsule_id);
+    dpa_capsule_handle_t *file = dpa_capsule_open_content(DPA_ALBUM_ID, track_id);
     if (!file) {
         dpa_core_send_event(DPA_EVENT_SYS_ERROR, "Failed to open track");
         goto cleanup;
@@ -572,15 +785,15 @@ static void player_task(void *pvParameters) {
         goto cleanup;
     }
     
-    ESP_LOGI(TAG, "Starting playback for %s", capsule_id);
+    ESP_LOGI(TAG, "Starting playback for %s", track_id);
     dpa_core_set_state(DPA_STATE_PLAYING);
 
     while (dpa_core_get_state() == DPA_STATE_PLAYING) {
         int bytes_read = dpa_capsule_read(file, in_buf, DECODE_BUF_SIZE);
         if (bytes_read <= 0) break; // End of file
         
-        // This is where a real audio DECODER would process in_buf to PCM
-        // For now, we write the (mock) decrypted data directly.
+        // This is where a real audio DECODER would process in_buf to 24-bit PCM
+        // For now, we write the (mock) decrypted data directly to the I2S HAL.
         dpa_audio_hal_write(in_buf, bytes_read);
     }
     
@@ -588,11 +801,11 @@ static void player_task(void *pvParameters) {
     dpa_capsule_close(file);
     
 cleanup:
-    ESP_LOGI(TAG, "Playback finished for %s", capsule_id);
+    ESP_LOGI(TAG, "Playback finished for %s", track_id);
     if (dpa_core_get_state() == DPA_STATE_PLAYING) {
        dpa_core_send_event(DPA_EVENT_PLAY_PAUSE, NULL);
     }
-    free(capsule_id);
+    free(track_id);
     player_task_handle = NULL;
     vTaskDelete(NULL);
 }
@@ -1019,7 +1232,7 @@ export const REPO_STRUCTURE: Directory[] = [
       },
       {
         name: 'dpa_ble',
-        isOpen: true,
+        isOpen: false,
         files: [
            { name: 'CMakeLists.txt', language: 'cmake', content: BLE_CMAKE },
            { name: 'dpa_ble.c', language: 'c', content: DPA_BLE_C },
@@ -1036,6 +1249,7 @@ export const REPO_STRUCTURE: Directory[] = [
       },
       {
         name: 'dpa_capsule',
+        isOpen: true,
         files: [
           { name: 'CMakeLists.txt', language: 'cmake', content: CAPSULE_CMAKE },
           { name: 'dpa_capsule.c', language: 'c', content: DPA_CAPSULE_C },
@@ -1052,7 +1266,7 @@ export const REPO_STRUCTURE: Directory[] = [
       },
       {
         name: 'dpa_audio',
-        isOpen: true,
+        isOpen: false,
         files: [
           { name: 'CMakeLists.txt', language: 'cmake', content: AUDIO_CMAKE },
           { name: 'dpa_audio_hal.c', language: 'c', content: DPA_AUDIO_HAL_C },
@@ -1063,7 +1277,7 @@ export const REPO_STRUCTURE: Directory[] = [
       },
       {
         name: 'dpa_input',
-        isOpen: true,
+        isOpen: false,
         files: [
           { name: 'CMakeLists.txt', language: 'cmake', content: INPUT_CMAKE },
           { name: 'dpa_button.c', language: 'c', content: DPA_BUTTON_C },
@@ -1075,7 +1289,7 @@ export const REPO_STRUCTURE: Directory[] = [
       },
       {
         name: 'dpa_power',
-        isOpen: true,
+        isOpen: false,
         files: [
           { name: 'CMakeLists.txt', language: 'cmake', content: POWER_CMAKE },
           { name: 'dpa_power.c', language: 'c', content: DPA_POWER_C },
@@ -1125,6 +1339,15 @@ export const REPO_STRUCTURE: Directory[] = [
     ]
   },
   {
+    name: 'docs',
+    isOpen: true,
+    files: [
+      { name: 'SETUP.md', language: 'bash', content: DOCS_SETUP_MD },
+      { name: 'CAPSULE_SPEC.md', language: 'bash', content: DOCS_CAPSULE_SPEC_MD },
+      { name: 'API.md', language: 'bash', content: DOCS_API_MD }
+    ]
+  },
+  {
     name: 'backend',
     isOpen: false,
     files: [],
@@ -1152,7 +1375,7 @@ export const REPO_STRUCTURE: Directory[] = [
   },
   {
     name: 'root_files',
-    isOpen: true,
+    isOpen: false,
     files: [
        { name: 'README.md', language: 'bash', content: README_MD },
        { name: 'CMakeLists.txt', language: 'cmake', content: ROOT_CMAKE },

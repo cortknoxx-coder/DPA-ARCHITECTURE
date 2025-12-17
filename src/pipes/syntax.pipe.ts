@@ -1,4 +1,3 @@
-
 import { Pipe, PipeTransform } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
@@ -26,7 +25,8 @@ export class SyntaxPipe implements PipeTransform {
       html = html.replace(/^(\s*#\w+)(.*)$/gm, '<span class="text-[#c586c0]">$1</span>$2');
       
       // 3. Keywords
-      const keywords = /\b(void|int|char|short|long|float|double|bool|struct|enum|union|typedef|static|const|volatile|unsigned|signed|if|else|while|for|do|switch|case|default|break|continue|return|goto|sizeof|NULL|true|false)\b/g;
+      // FIX: Added stdint types and size_t to keywords for better highlighting.
+      const keywords = /\b(void|int|char|short|long|float|double|bool|struct|enum|union|typedef|static|const|volatile|unsigned|signed|if|else|while|for|do|switch|case|default|break|continue|return|goto|sizeof|NULL|true|false|uint8_t|uint16_t|uint32_t|uint64_t|size_t)\b/g;
       html = html.replace(keywords, '<span class="text-[#569cd6]">$1</span>');
       
       // 4. Functions (word followed by paren)

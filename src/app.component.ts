@@ -1,4 +1,3 @@
-
 import { Component, signal, computed, WritableSignal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { REPO_STRUCTURE, Directory, CodeFile } from './data/firmware-files';
@@ -31,10 +30,11 @@ export class AppComponent {
   // Build State
   isBuilding = signal(false);
   buildProgress = signal(0);
+  // FIX: Updated welcome message to v11.0.
   terminalLogs = signal<string[]>([
-    'Welcome to DPA Firmware Studio v9.0',
+    'Welcome to DPA Firmware Studio v11.0',
+    'Final Architecture Handoff Package.',
     'ESP-IDF v5.1 environment ready.',
-    'Ready for production hardening analysis.',
     '$ _'
   ]);
   
@@ -60,19 +60,35 @@ export class AppComponent {
       return this.structure();
     }
     
-    const filter = (dirs: Directory[]): Directory[] => {
-      return dirs.reduce((acc, dir) => {
-        const matchingFiles = dir.files.filter(f => f.name.toLowerCase().includes(query));
-        const filteredSubDirs = dir.directories ? filter(dir.directories) : [];
-        
-        if (matchingFiles.length > 0 || filteredSubDirs.length > 0) {
-          acc.push({ ...dir, files: matchingFiles, directories: filteredSubDirs, isOpen: true });
-        }
-        return acc;
-      }, [] as Directory[]);
+    const filter = (items: (Directory|CodeFile)[]) : any[] => {
+       return items.map(item => {
+         if ('directories' in item) { // It's a directory
+            const dir = item as Directory;
+            const matchingFiles = dir.files.filter(f => f.name.toLowerCase().includes(query));
+            const filteredSubDirs = dir.directories ? filter(dir.directories) : [];
+            if(dir.name.toLowerCase().includes(query) || matchingFiles.length > 0 || filteredSubDirs.length > 0) {
+               return {...dir, files: matchingFiles, directories: filteredSubDirs, isOpen: true};
+            }
+         } else { // It's a file
+            const file = item as CodeFile;
+            if (file.name.toLowerCase().includes(query)) return file;
+         }
+         return null;
+       }).filter(Boolean);
+    };
+
+    const topLevelFilter = (dirs: Directory[]): Directory[] => {
+       return dirs.reduce((acc, dir) => {
+          const matchingFiles = dir.files.filter(f => f.name.toLowerCase().includes(query));
+          const filteredSubDirs = dir.directories ? topLevelFilter(dir.directories) : [];
+          if(dir.name.toLowerCase().includes(query) || matchingFiles.length > 0 || filteredSubDirs.length > 0) {
+            acc.push({...dir, files: matchingFiles, directories: filteredSubDirs, isOpen: true});
+          }
+          return acc;
+       }, [] as Directory[]);
     };
     
-    return filter(this.structure());
+    return topLevelFilter(this.structure());
   });
 
 
@@ -161,14 +177,17 @@ export class AppComponent {
   }
 
   private findFile(name: string): CodeFile | undefined {
-    for (const root of this.structure()) {
-      if (root.directories) {
-        for (const dir of root.directories) {
-          const file = dir.files.find(f => f.name === name);
-          if (file) return file;
+    const search = (dirs: Directory[]): CodeFile | undefined => {
+        for(const dir of dirs) {
+            const foundFile = dir.files.find(f => f.name === name);
+            if(foundFile) return foundFile;
+            if(dir.directories) {
+                const foundInSub = search(dir.directories);
+                if(foundInSub) return foundInSub;
+            }
         }
-      }
+        return undefined;
     }
-    return undefined;
+    return search(this.structure());
   }
 }
