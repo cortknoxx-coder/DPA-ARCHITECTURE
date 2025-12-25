@@ -8,8 +8,8 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 export class SyntaxPipe implements PipeTransform {
   constructor(private sanitizer: DomSanitizer) {}
 
-  transform(code: string, lang: string): SafeHtml {
-    if (!code) return '';
+  transform(code: string, lang?: string): SafeHtml {
+    if (!code) return this.sanitizer.bypassSecurityTrustHtml('');
     
     // Basic HTML escape
     let html = code
